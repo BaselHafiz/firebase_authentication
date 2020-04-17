@@ -35,6 +35,8 @@ dev_dependencies:
   flutter_facebook_login: ^3.0.0
   cloud_firestore: ^0.13.4+2
   http:
+  data_connection_checker: ^0.3.4
+  rxdart: ^0.21.0
 
 
 

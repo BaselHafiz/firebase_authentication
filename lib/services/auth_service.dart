@@ -1,195 +1,244 @@
 import 'dart:async';
-
+import 'package:rxdart/subjects.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebaseauthentication/pages/dashboard_page.dart';
-import 'package:firebaseauthentication/pages/login_options_page.dart';
-import 'package:firebaseauthentication/pages/login_with_email_and_password_page.dart';
-import 'package:firebaseauthentication/pages/login_with_phone_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_facebook_login/flutter_facebook_login.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-
-enum LoginMode {
-  loginWithPhone,
-  loginWithEmailAndPassword,
-  loginWithGoogle,
-  loginWithFacebook,
-  noLoginOptionChosen,
-}
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AuthService with ChangeNotifier {
+  final FirebaseAuth auth = FirebaseAuth.instance;
+  String errorMessage;
+  PublishSubject<bool> userSubject = PublishSubject();
   bool isLoading = false;
-  LoginMode loginMode = LoginMode.noLoginOptionChosen;
-  AuthResult authResult;
-  String signedInUserUid;
-  String signedInUserEmail;
-  String signedInUserGoogleEmail;
-  String signedInUserGoogleProfilePhotoUrl;
-  String signedInUserFacebookEmail;
-  String signedInUserFacebookProfilePhotoUrl;
 
-  Stream<String> get onAuthStateChanged {
-    return FirebaseAuth.instance.onAuthStateChanged.map((FirebaseUser user) => user?.uid);
-  }
-
-  StreamBuilder<String> handleAuth() {
-    getCurrentUserUid();
-    getCurrentUserEmail();
-
-    return StreamBuilder<String>(
-      stream: onAuthStateChanged,
-      builder: (BuildContext context, AsyncSnapshot<String> snapshot) {
-        if (snapshot.hasData) {
-          return DashboardPage(
-            userUid: signedInUserUid,
-            userEmail: signedInUserEmail,
-            userGoogleEmail: signedInUserGoogleEmail,
-            userGoogleProfilePhotoUrl: signedInUserGoogleProfilePhotoUrl,
-            userFacebookEmail: signedInUserFacebookEmail,
-            userFacebookProfilePhotoUrl: signedInUserFacebookProfilePhotoUrl,
-          );
-        } else {
-          switch (loginMode) {
-            case LoginMode.loginWithPhone:
-              return LoginWithPhonePage();
-            case LoginMode.loginWithEmailAndPassword:
-              return LoginWithEmailAndPasswordPage();
-            default:
-              return LoginOptionsPage();
-          }
-        }
-      },
-    );
-  }
-
-  Future<void> signOut() async {
-    isLoading = true;
-    notifyListeners();
-    await Future.delayed(Duration(milliseconds: 500)).then((_) async {
-      await FirebaseAuth.instance.signOut();
-    });
-
-    isLoading = false;
-    signedInUserUid = null;
-    signedInUserEmail = null;
-    signedInUserGoogleEmail = null;
-    signedInUserGoogleProfilePhotoUrl = null;
-    signedInUserFacebookEmail = null;
-    signedInUserFacebookProfilePhotoUrl = null;
-
-    notifyListeners();
-  }
-
-  Future<void> signIn(AuthCredential authCred) async {
-    isLoading = true;
-    notifyListeners();
+  Future<bool> signOut(BuildContext context) async {
     try {
-      authResult = await FirebaseAuth.instance.signInWithCredential(authCred);
+      isLoading = true;
+      notifyListeners();
+      await auth.signOut();
+      isLoading = false;
+      notifyListeners();
     } catch (error) {
-      print('Error: ${error.toString()}');
+      notifyUser(error.message.toString(), context);
+      isLoading = false;
+      notifyListeners();
+      return false;
     }
-    isLoading = false;
-    notifyListeners();
+    userSubject.add(false);
+    return true;
   }
 
-  void signInWithOTP(smsCode, verId) async {
-    AuthCredential authCred = PhoneAuthProvider.getCredential(verificationId: verId, smsCode: smsCode);
-    await signIn(authCred);
+  Future<FirebaseUser> get currentFirebaseUser async {
+    FirebaseUser currentUser;
+    while (currentUser == null) {
+      currentUser = await auth.currentUser();
+    }
+    notifyListeners();
+    return currentUser;
   }
 
-  Future<void> signInWithEmailAndPassword(String email, String password) async {
-    isLoading = true;
-    notifyListeners();
+  Future<void> autoAuthenticate() async {
+    FirebaseUser currentUser;
+    int counter = 0;
+    while (currentUser == null && counter <= 500) {
+      currentUser = await auth.currentUser();
+      counter++;
+    }
+
+    if (currentUser != null) {
+      final QuerySnapshot snapshot =
+          await Firestore.instance.collection('/users').where('userUid', isEqualTo: currentUser.uid).getDocuments();
+
+      if (snapshot.documents[0].data['roles']['isAdmin']) {
+        await auth.signOut();
+      } else {
+        userSubject.add(true);
+      }
+    }
+  }
+
+  Future<bool> signIn(AuthCredential authCred, BuildContext context, {smsCode}) async {
     try {
-      authResult = await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: password);
+      isLoading = true;
+      notifyListeners();
+      AuthResult authResult = await auth.signInWithCredential(authCred);
+      if (authResult.user == null) {
+        isLoading = false;
+        notifyListeners();
+        return false;
+      }
     } catch (error) {
-      print('Error: ${error.toString()}');
+      if (smsCode == null || smsCode == '') {
+        notifyUser('The SMS Code could not be empty.', context);
+      } else {
+        notifyUser(error.message.toString(), context);
+      }
+      isLoading = false;
+      notifyListeners();
+      return false;
     }
+    userSubject.add(true);
     isLoading = false;
     notifyListeners();
+    return true;
   }
 
-  Future<void> createUserWithEmailAndPassword(String email, String password) async {
-    isLoading = true;
-    notifyListeners();
+  Future<bool> signInWithOTP(smsCode, verId, context) async {
     try {
-      authResult = await FirebaseAuth.instance.createUserWithEmailAndPassword(email: email, password: password);
+      AuthCredential authCred = PhoneAuthProvider.getCredential(verificationId: verId, smsCode: smsCode);
+      if (await signIn(authCred, context, smsCode: smsCode)) {
+        return true;
+      } else {
+        return false;
+      }
     } catch (error) {
-      print('Error: ${error.toString()}');
+      notifyUser(error.message.toString(), context);
+      return false;
     }
+  }
+
+  Future<bool> signInWithEmailAndPassword(String email, String password, BuildContext context) async {
+    try {
+      isLoading = true;
+      notifyListeners();
+      AuthResult authResult = await auth.signInWithEmailAndPassword(email: email, password: password);
+      if (authResult.user == null) {
+        isLoading = false;
+        notifyListeners();
+        return false;
+      }
+    } catch (error) {
+      notifyUser(error.message.toString(), context);
+      isLoading = false;
+      notifyListeners();
+      return false;
+    }
+    userSubject.add(true);
     isLoading = false;
     notifyListeners();
+    return true;
   }
 
-  Future<void> getCurrentUserUid() async {
-    FirebaseUser user = await FirebaseAuth.instance.currentUser();
-    signedInUserUid = user?.uid;
-  }
-
-  Future<void> getCurrentUserEmail() async {
-    FirebaseUser user = await FirebaseAuth.instance.currentUser();
-    signedInUserEmail = user?.email;
-  }
-
-  Future<bool> signInWithGoogle() async {
+  Future<bool> createUserWithEmailAndPassword(String email, String password, BuildContext context) async {
     try {
+      isLoading = true;
+      notifyListeners();
+      AuthResult authResult = await auth.createUserWithEmailAndPassword(email: email, password: password);
+      if (authResult.user == null) {
+        isLoading = false;
+        notifyListeners();
+        return false;
+      }
+    } catch (error) {
+      notifyUser(error.message.toString(), context);
+      isLoading = false;
+      notifyListeners();
+      return false;
+    }
+    userSubject.add(true);
+    isLoading = false;
+    notifyListeners();
+    return true;
+  }
+
+  Future<bool> signInWithGoogle(BuildContext context) async {
+    try {
+      isLoading = true;
+      notifyListeners();
       GoogleSignInAccount account = await GoogleSignIn().signIn();
       if (account == null) {
+        isLoading = false;
+        notifyListeners();
         return false;
       }
 
-      AuthResult authResult = await FirebaseAuth.instance.signInWithCredential(GoogleAuthProvider.getCredential(
+      AuthResult authResult = await auth.signInWithCredential(GoogleAuthProvider.getCredential(
         idToken: (await account.authentication).idToken,
         accessToken: (await account.authentication).accessToken,
       ));
 
       if (authResult.user == null) {
+        isLoading = false;
+        notifyListeners();
         return false;
       }
-
-      signedInUserGoogleEmail = authResult.user.email;
-      signedInUserGoogleProfilePhotoUrl = authResult.user.photoUrl;
-
+      userSubject.add(true);
+      isLoading = false;
+      notifyListeners();
       return true;
     } catch (error) {
-      print('Error in logging with Google');
-      print(error);
+      notifyUser(error.message.toString(), context);
+      isLoading = false;
+      notifyListeners();
       return false;
     }
   }
 
-  Future<bool> signInWithFacebook() async {
+  Future<bool> signInWithFacebook(BuildContext context) async {
     try {
+      isLoading = true;
+      notifyListeners();
       var facebookLogin = FacebookLogin();
       var result = await facebookLogin.logIn(['email']);
 
       if (result == null) {
+        isLoading = false;
+        notifyListeners();
         return false;
       }
 
       switch (result.status) {
         case FacebookLoginStatus.loggedIn:
           AuthCredential credential = FacebookAuthProvider.getCredential(accessToken: result.accessToken.token);
-          AuthResult authResult = await FirebaseAuth.instance.signInWithCredential(credential);
+          AuthResult authResult = await auth.signInWithCredential(credential);
 
           if (authResult.user == null) {
+            isLoading = false;
+            notifyListeners();
             return false;
           }
-
-          signedInUserFacebookEmail = authResult.user.email;
-          signedInUserFacebookProfilePhotoUrl = authResult.user.photoUrl;
-          return true;
+          break;
         case FacebookLoginStatus.cancelledByUser:
+          isLoading = false;
+          notifyListeners();
           return false;
         case FacebookLoginStatus.error:
+          isLoading = false;
+          notifyListeners();
           return false;
       }
-
+      userSubject.add(true);
+      isLoading = false;
+      notifyListeners();
       return true;
     } catch (error) {
-      print('Error in logging with Facebook');
-      print(error);
+      notifyUser(error.message.toString(), context);
+      isLoading = false;
+      notifyListeners();
       return false;
     }
+  }
+
+  Future<Widget> notifyUser(String message, BuildContext context) async {
+    return await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        elevation: 5,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0)),
+        title: Text('Error Occurred', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: SingleChildScrollView(
+          child: Text('$message', style: TextStyle(fontSize: 18)),
+        ),
+        actions: <Widget>[
+          FlatButton(
+            child: Text('Ok', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+          )
+        ],
+      ),
+    );
   }
 }

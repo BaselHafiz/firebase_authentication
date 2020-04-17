@@ -1,7 +1,12 @@
-import 'package:firebaseauthentication/pages/login_options_page.dart';
+import 'package:data_connection_checker/data_connection_checker.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebaseauthentication/services/auth_service.dart';
+import 'package:firebaseauthentication/services/user_database_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
+import '../services/auth_service.dart';
+import 'normal_user_dashboard_page.dart';
 
 enum FormType {
   login,
@@ -18,39 +23,27 @@ class LoginWithEmailAndPasswordPage extends StatefulWidget {
 class _LoginWithEmailAndPasswordPageState extends State<LoginWithEmailAndPasswordPage> {
   String _email;
   String _password;
-  String _passwordConfirmed;
-  final formKey = GlobalKey<FormState>();
+  final TextEditingController _passwordTextController = TextEditingController();
+  final allUsersFormKey = GlobalKey<FormState>();
   FormType formType = FormType.login;
   AuthService authService;
+  UserDatabaseService userDatabaseService;
+
   @override
   Widget build(BuildContext context) {
     authService = Provider.of<AuthService>(context, listen: false);
+    userDatabaseService = Provider.of<UserDatabaseService>(context, listen: false);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          'Firebase Authentication',
-          style: TextStyle(
-            color: Colors.deepPurple,
-            fontSize: 18,
-          ),
-        ),
-        actions: <Widget>[
-          IconButton(
-            icon: Icon(
-              Icons.exit_to_app,
-              color: Colors.deepPurple,
-            ),
-            iconSize: 25,
-            onPressed: () => Navigator.of(context).pushReplacementNamed(LoginOptionsPage.routeName),
-          ),
-        ],
+        title: Text('Firebase Authentication', style: TextStyle(color: Colors.deepPurple, fontSize: 18)),
+        centerTitle: true,
       ),
       body: SingleChildScrollView(
         child: Container(
           padding: EdgeInsets.all(15),
           child: Form(
-              key: formKey,
+              key: allUsersFormKey,
               child: Column(
                 children: <Widget>[
                   ...buildInputTextFields(),
@@ -58,8 +51,13 @@ class _LoginWithEmailAndPasswordPageState extends State<LoginWithEmailAndPasswor
                   ...buildSubmitButtons(),
                   SizedBox(height: 10),
                   Consumer<AuthService>(
-                    builder: (context, auth, _) =>
-                        auth.isLoading ? Center(child: CircularProgressIndicator()) : Container(),
+                    builder: (context, auth, _) => Visibility(
+                      child: Center(child: CircularProgressIndicator()),
+                      maintainAnimation: true,
+                      maintainSize: true,
+                      maintainState: true,
+                      visible: auth.isLoading,
+                    ),
                   ),
                 ],
               )),
@@ -72,6 +70,7 @@ class _LoginWithEmailAndPasswordPageState extends State<LoginWithEmailAndPasswor
     if (formType == FormType.login) {
       return [
         TextFormField(
+          keyboardType: TextInputType.emailAddress,
           decoration: InputDecoration(labelText: 'Email'),
           validator: (value) {
             if (value.isEmpty) {
@@ -84,6 +83,7 @@ class _LoginWithEmailAndPasswordPageState extends State<LoginWithEmailAndPasswor
           onSaved: (value) => _email = value,
         ),
         TextFormField(
+          keyboardType: TextInputType.text,
           decoration: InputDecoration(labelText: 'Password'),
           validator: (value) {
             if (value.isEmpty) {
@@ -100,6 +100,7 @@ class _LoginWithEmailAndPasswordPageState extends State<LoginWithEmailAndPasswor
     } else {
       return [
         TextFormField(
+          keyboardType: TextInputType.emailAddress,
           decoration: InputDecoration(labelText: 'Email'),
           validator: (value) {
             if (value.isEmpty) {
@@ -112,6 +113,7 @@ class _LoginWithEmailAndPasswordPageState extends State<LoginWithEmailAndPasswor
           onSaved: (value) => _email = value,
         ),
         TextFormField(
+          keyboardType: TextInputType.text,
           decoration: InputDecoration(labelText: 'Password'),
           validator: (value) {
             if (value.isEmpty) {
@@ -122,19 +124,19 @@ class _LoginWithEmailAndPasswordPageState extends State<LoginWithEmailAndPasswor
             return null;
           },
           onSaved: (value) => _password = value,
+          controller: _passwordTextController,
           obscureText: true,
         ),
         TextFormField(
           validator: (String value) {
             if (value.isEmpty) {
               return 'Password confirm is required';
-            } else if (_passwordConfirmed != _password) {
+            } else if (_passwordTextController.text != value) {
               return 'Password do not match';
             } else
               return null;
           },
           obscureText: true,
-          onSaved: (value) => _passwordConfirmed = value,
           decoration: InputDecoration(labelText: 'Confirm Password'),
         ),
       ];
@@ -153,7 +155,7 @@ class _LoginWithEmailAndPasswordPageState extends State<LoginWithEmailAndPasswor
         ),
         FlatButton(
             onPressed: () {
-              formKey.currentState.reset();
+              allUsersFormKey.currentState.reset();
               setState(() {
                 formType = FormType.register;
               });
@@ -174,7 +176,7 @@ class _LoginWithEmailAndPasswordPageState extends State<LoginWithEmailAndPasswor
         ),
         FlatButton(
             onPressed: () {
-              formKey.currentState.reset();
+              allUsersFormKey.currentState.reset();
               setState(() {
                 formType = FormType.login;
               });
@@ -188,7 +190,7 @@ class _LoginWithEmailAndPasswordPageState extends State<LoginWithEmailAndPasswor
   }
 
   bool validateAndSave() {
-    final form = formKey.currentState;
+    final form = allUsersFormKey.currentState;
     if (!form.validate()) {
       return false;
     }
@@ -196,12 +198,46 @@ class _LoginWithEmailAndPasswordPageState extends State<LoginWithEmailAndPasswor
     return true;
   }
 
-  void validateAndSubmit() {
+  void validateAndSubmit() async {
     if (validateAndSave()) {
       if (formType == FormType.login) {
-        authService.signInWithEmailAndPassword(_email, _password);
+        if (await DataConnectionChecker().hasConnection) {
+          if (await authService.signInWithEmailAndPassword(_email, _password, context)) {
+            FirebaseUser currentUser = await authService.currentFirebaseUser;
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                  builder: (context) => NormalUserDashboardPage(
+                        user: currentUser,
+                        loginMode: LoginMode.loginWithEmailAndPassword,
+                      )),
+            );
+          }
+        } else {
+          authService.notifyUser('No Internet connection.', context);
+        }
       } else {
-        authService.createUserWithEmailAndPassword(_email, _password);
+        if (await DataConnectionChecker().hasConnection) {
+          if (await authService.createUserWithEmailAndPassword(_email, _password, context)) {
+            FirebaseUser currentUser = await authService.currentFirebaseUser;
+
+            if (!await userDatabaseService.isEmailExist(currentUser, context)) {
+              userDatabaseService.insertNewUser(
+                  firebaseUser: currentUser, loginMode: LoginMode.loginWithEmailAndPassword);
+            }
+
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                  builder: (context) => NormalUserDashboardPage(
+                        user: currentUser,
+                        loginMode: LoginMode.loginWithEmailAndPassword,
+                      )),
+            );
+          }
+        } else {
+          authService.notifyUser('No Internet connection.', context);
+        }
       }
     }
   }
