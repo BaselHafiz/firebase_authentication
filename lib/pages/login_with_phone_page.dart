@@ -77,12 +77,9 @@ class _LoginWithPhonePageState extends State<LoginWithPhonePage> {
                       if (codeSent) {
                         if (await authService.signInWithOTP(smsCode, verificationId, context)) {
                           FirebaseUser currentUser = await authService.currentFirebaseUser;
-                          int counter = 0;
                           if (!await userDatabaseService.isPhoneExist(currentUser, context)) {
                             userDatabaseService.insertNewUser(
                                 firebaseUser: currentUser, loginMode: LoginMode.loginWithPhone);
-                            counter++;
-                            debugPrint('Basel =>>> ' + '$counter');
                           }
                           Navigator.pushReplacement(
                             context,

@@ -1,6 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebaseauthentication/pages/add_and_update_product_page.dart';
 import 'package:firebaseauthentication/pages/admin_user_dashboard_page.dart';
 import 'package:firebaseauthentication/pages/normal_user_dashboard_page.dart';
+import 'package:firebaseauthentication/services/product_database_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -10,8 +12,6 @@ import 'pages/login_with_email_and_password_page.dart';
 import 'pages/login_with_phone_page.dart';
 import 'services/auth_service.dart';
 import 'services/user_database_service.dart';
-
-//void main() => runApp(MyApp());
 
 void main() => runApp(
       ChangeNotifierProvider(
@@ -51,6 +51,7 @@ class _MyAppState extends State<MyApp> {
       providers: [
         ChangeNotifierProvider(create: (context) => AuthService()),
         ChangeNotifierProvider(create: (context) => UserDatabaseService()),
+        ChangeNotifierProvider(create: (context) => ProductDatabaseService()),
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -64,6 +65,7 @@ class _MyAppState extends State<MyApp> {
           LoginWithEmailAndPasswordAdminsPage.routeName: (context) => LoginWithEmailAndPasswordAdminsPage(),
           NormalUserDashboardPage.routeName: (context) => NormalUserDashboardPage(),
           AdminUserDashboardPage.routeName: (context) => AdminUserDashboardPage(),
+          AddAndUpdateProductPage.routeName: (context) => AddAndUpdateProductPage(operationMode: OperationMode.add),
         },
       ),
     );

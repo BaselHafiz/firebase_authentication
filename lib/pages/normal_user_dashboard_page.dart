@@ -2,10 +2,12 @@ import 'package:data_connection_checker/data_connection_checker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebaseauthentication/pages/login_options_page.dart';
 import 'package:firebaseauthentication/services/auth_service.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/auth_service.dart';
+import '../services/product_database_service.dart';
 
 enum LoginMode {
   loginWithPhone,
@@ -28,9 +30,21 @@ class NormalUserDashboardPage extends StatefulWidget {
 }
 
 class _NormalUserDashboardPageState extends State<NormalUserDashboardPage> {
+  QuerySnapshot products;
+  ProductDatabaseService productService;
+
+  @override
+  void didChangeDependencies() async {
+    productService = Provider.of<ProductDatabaseService>(context, listen: false);
+    await getProducts(productService, context);
+
+    super.didChangeDependencies();
+  }
+
   @override
   Widget build(BuildContext context) {
     final AuthService authService = Provider.of<AuthService>(context, listen: false);
+    final ProductDatabaseService productService = Provider.of<ProductDatabaseService>(context, listen: false);
 
     return Scaffold(
       appBar: AppBar(
@@ -38,35 +52,20 @@ class _NormalUserDashboardPageState extends State<NormalUserDashboardPage> {
         centerTitle: true,
       ),
       drawer: MainDrawer(user: widget.user, authService: authService, loginMode: widget.loginMode),
-      body: Container(
-        width: double.infinity,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+      body: RefreshIndicator(
+        onRefresh: () async => await getProducts(productService, context),
+        child: ListView(
           children: <Widget>[
-            buildSignedInUserLabels(authService, widget.user),
+            SizedBox(height: 20),
+            createListViewOfProducts(products),
             SizedBox(height: 15),
-            RaisedButton(
-              shape: RoundedRectangleBorder(borderRadius: new BorderRadius.circular(5.0)),
-              color: Colors.cyan,
-              elevation: 7,
-              child: Text('LogOut', style: TextStyle(color: Colors.deepPurple, fontSize: 15)),
-              onPressed: () async {
-                if (await DataConnectionChecker().hasConnection) {
-                  if (await authService.signOut(context)) {
-                    if (widget.loginMode == LoginMode.loginWithPhone ||
-                        widget.loginMode == LoginMode.loginWithEmailAndPassword) {
-                      Navigator.pop(context);
-                    } else if (widget.loginMode == LoginMode.loginWithGoogle ||
-                        widget.loginMode == LoginMode.loginWithFacebook) {
-                      Navigator.pushReplacementNamed(context, LoginOptionsPage.routeName);
-                    } else {
-                      Navigator.pushReplacementNamed(context, LoginOptionsPage.routeName);
-                    }
-                  }
-                } else {
-                  authService.notifyUser('No Internet connection.', context);
-                }
-              },
+            Center(child: buildSignedInUserLabels(authService, widget.user)),
+            SizedBox(height: 10),
+            Center(
+              child: Text(
+                'Normal User',
+                style: TextStyle(color: Colors.deepPurple, fontSize: 17, fontWeight: FontWeight.bold),
+              ),
             ),
             SizedBox(height: 15),
             Consumer<AuthService>(
@@ -85,18 +84,50 @@ class _NormalUserDashboardPageState extends State<NormalUserDashboardPage> {
   }
 
   // ignore: missing_return
+  Widget createListViewOfProducts(QuerySnapshot products) {
+    if (products != null) {
+      return ListView.builder(
+        shrinkWrap: true,
+        itemCount: products.documents.length,
+        padding: EdgeInsets.symmetric(horizontal: 20),
+        itemBuilder: (BuildContext context, int index) {
+          return Card(
+            elevation: 5,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0)),
+            child: ListTile(
+              title: Text(
+                products.documents[index].data['productName'],
+                style: TextStyle(color: Colors.deepPurple, fontSize: 21, fontWeight: FontWeight.bold),
+              ),
+              subtitle: Text(
+                products.documents[index].data['productColor'],
+                style: TextStyle(color: Colors.deepPurple, fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              trailing: CircleAvatar(
+                child: Image.asset('assets/login.png', height: 75, width: 75, fit: BoxFit.cover),
+              ),
+            ),
+          );
+        },
+      );
+    } else {
+      return Center(child: CircularProgressIndicator());
+    }
+  }
+
+  // ignore: missing_return
   Widget buildSignedInUserLabels(AuthService authService, FirebaseUser user) {
     switch (widget.loginMode) {
       case LoginMode.loginWithPhone:
         return Text(
           user.phoneNumber,
-          style: TextStyle(color: Colors.deepPurple, fontSize: 16, fontWeight: FontWeight.bold),
+          style: TextStyle(color: Colors.deepPurple, fontSize: 17, fontWeight: FontWeight.bold),
         );
 
       case LoginMode.loginWithEmailAndPassword:
         return Text(
           user.email,
-          style: TextStyle(color: Colors.deepPurple, fontSize: 16, fontWeight: FontWeight.bold),
+          style: TextStyle(color: Colors.deepPurple, fontSize: 17, fontWeight: FontWeight.bold),
         );
 
       case LoginMode.loginWithGoogle:
@@ -108,7 +139,7 @@ class _NormalUserDashboardPageState extends State<NormalUserDashboardPage> {
             SizedBox(height: 15),
             Text(
               user.email,
-              style: TextStyle(color: Colors.deepPurple, fontSize: 16, fontWeight: FontWeight.bold),
+              style: TextStyle(color: Colors.deepPurple, fontSize: 17, fontWeight: FontWeight.bold),
             ),
           ],
         );
@@ -122,7 +153,7 @@ class _NormalUserDashboardPageState extends State<NormalUserDashboardPage> {
             SizedBox(height: 15),
             Text(
               user.email,
-              style: TextStyle(color: Colors.deepPurple, fontSize: 16, fontWeight: FontWeight.bold),
+              style: TextStyle(color: Colors.deepPurple, fontSize: 17, fontWeight: FontWeight.bold),
             ),
           ],
         );
@@ -137,21 +168,30 @@ class _NormalUserDashboardPageState extends State<NormalUserDashboardPage> {
               SizedBox(height: 15),
               Text(
                 user.email,
-                style: TextStyle(color: Colors.deepPurple, fontSize: 16, fontWeight: FontWeight.bold),
+                style: TextStyle(color: Colors.deepPurple, fontSize: 17, fontWeight: FontWeight.bold),
               ),
             ],
           );
         } else if (user.email != null) {
           return Text(
             user.email,
-            style: TextStyle(color: Colors.deepPurple, fontSize: 16, fontWeight: FontWeight.bold),
+            style: TextStyle(color: Colors.deepPurple, fontSize: 17, fontWeight: FontWeight.bold),
           );
         } else {
           return Text(
             user.phoneNumber,
-            style: TextStyle(color: Colors.deepPurple, fontSize: 16, fontWeight: FontWeight.bold),
+            style: TextStyle(color: Colors.deepPurple, fontSize: 17, fontWeight: FontWeight.bold),
           );
         }
+    }
+  }
+
+  Future<void> getProducts(ProductDatabaseService productService, BuildContext context) async {
+    final retrievedProducts = await productService.retrieveProducts(context);
+    if (retrievedProducts != null) {
+      setState(() {
+        products = retrievedProducts;
+      });
     }
   }
 }
@@ -197,9 +237,11 @@ class MainDrawer extends StatelessWidget {
             onTap: () {},
           ),
           ListTile(
-            title: Text('My Orders', style: TextStyle(fontSize: 16)),
-            leading: Icon(Icons.shopping_basket, color: Colors.cyan, size: 27),
-            onTap: () {},
+            title: Text('Add Product', style: TextStyle(fontSize: 16, color: Colors.blueGrey)),
+            leading: Icon(Icons.add_shopping_cart, color: Colors.cyan, size: 27),
+            onTap: () {
+              notifyUser('You should sign in as an Admin', context);
+            },
           ),
           ListTile(
             title: Text('Sign Out', style: TextStyle(fontSize: 16)),
@@ -232,6 +274,28 @@ class MainDrawer extends StatelessWidget {
             leading: Icon(Icons.help, color: Colors.cyan, size: 27),
             onTap: () {},
           ),
+        ],
+      ),
+    );
+  }
+
+  Future<Widget> notifyUser(String message, BuildContext context) async {
+    return await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        elevation: 5,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0)),
+        title: Text('Error Occurred', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: SingleChildScrollView(
+          child: Text('$message', style: TextStyle(fontSize: 18)),
+        ),
+        actions: <Widget>[
+          FlatButton(
+            child: Text('Ok', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+          )
         ],
       ),
     );
