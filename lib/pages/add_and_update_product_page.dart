@@ -16,9 +16,9 @@ enum OperationMode {
 class AddAndUpdateProductPage extends StatefulWidget {
   static String routeName = '/add_and_update_product_page';
   OperationMode operationMode = OperationMode.add;
-  DocumentSnapshot documentSnapshot;
+  Product selectedProduct;
 
-  AddAndUpdateProductPage({this.operationMode, this.documentSnapshot});
+  AddAndUpdateProductPage({this.operationMode, this.selectedProduct});
 
   @override
   _AddAndUpdateProductPageState createState() => _AddAndUpdateProductPageState();
@@ -70,7 +70,7 @@ class _AddAndUpdateProductPageState extends State<AddAndUpdateProductPage> {
   List<Widget> buildInputTextFields() {
     return [
       TextFormField(
-        initialValue: widget.operationMode == OperationMode.update ? widget.documentSnapshot.data['productName'] : null,
+        initialValue: widget.operationMode == OperationMode.update ? widget.selectedProduct.productName : null,
         keyboardType: TextInputType.text,
         decoration: InputDecoration(labelText: 'Product Name'),
         validator: (value) => value.isEmpty ? 'Name is required' : null,
@@ -81,8 +81,7 @@ class _AddAndUpdateProductPageState extends State<AddAndUpdateProductPage> {
         },
       ),
       TextFormField(
-        initialValue:
-            widget.operationMode == OperationMode.update ? widget.documentSnapshot.data['productColor'] : null,
+        initialValue: widget.operationMode == OperationMode.update ? widget.selectedProduct.productColor : null,
         keyboardType: TextInputType.text,
         decoration: InputDecoration(labelText: 'Product Color'),
         validator: (value) => value.isEmpty ? 'Color is required' : null,
@@ -118,14 +117,16 @@ class _AddAndUpdateProductPageState extends State<AddAndUpdateProductPage> {
 
   void validateAndSubmit() async {
     if (validateAndSave()) {
-      Map<String, dynamic> newProduct = {
-        'productName': productName,
-        'productColor': productColor,
-      };
+      Product newProduct = Product(
+        productId: DateTime.now().toIso8601String(),
+        productName: productName,
+        productColor: productColor,
+      );
+
       if (await DataConnectionChecker().hasConnection) {
         widget.operationMode == OperationMode.add
             ? await productDatabaseService.addProduct(newProduct, context)
-            : await productDatabaseService.updateProductVer1(widget.documentSnapshot, newProduct, context);
+            : await productDatabaseService.updateProductVer1(widget.selectedProduct.productId, newProduct, context);
         FirebaseUser currentUser = await authService.currentFirebaseUser;
         Navigator.pushReplacement(
           context,

@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:data_connection_checker/data_connection_checker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebaseauthentication/services/auth_service.dart';
@@ -23,7 +22,7 @@ class AdminUserDashboardPage extends StatefulWidget {
 }
 
 class _AdminUserDashboardPageState extends State<AdminUserDashboardPage> {
-  QuerySnapshot products;
+  List<Product> products;
   ProductDatabaseService productService;
 
   @override
@@ -83,11 +82,11 @@ class _AdminUserDashboardPageState extends State<AdminUserDashboardPage> {
   }
 
   // ignore: missing_return
-  Widget createListViewOfProducts(QuerySnapshot products, ProductDatabaseService productService, BuildContext context) {
+  Widget createListViewOfProducts(List<Product> products, ProductDatabaseService productService, BuildContext context) {
     if (products != null) {
       return ListView.builder(
         shrinkWrap: true,
-        itemCount: products.documents.length,
+        itemCount: products.length,
         padding: EdgeInsets.symmetric(horizontal: 20),
         itemBuilder: (BuildContext context, int index) {
           return Dismissible(
@@ -113,13 +112,18 @@ class _AdminUserDashboardPageState extends State<AdminUserDashboardPage> {
                   MaterialPageRoute(
                       builder: (context) => AddAndUpdateProductPage(
                             operationMode: OperationMode.update,
-                            documentSnapshot: products.documents[index],
+                            selectedProduct: products[index],
                           )),
                 );
               }
               if (direction == DismissDirection.startToEnd) {
-                products.documents.removeAt(index);
-                if (await productService.deleteProductVer1(products.documents[index], context)) {
+                if (await productService.deleteProductVer1(products[index].productId, context)) {
+                  if (products.contains(products[index])) {
+                    setState(() {
+                      products.remove(products[index]);
+                    });
+                  }
+
                   Scaffold.of(context).showSnackBar(
                     SnackBar(
                       content: Text('Item is removed', style: TextStyle(fontSize: 16, color: Colors.amber)),
@@ -190,11 +194,11 @@ class _AdminUserDashboardPageState extends State<AdminUserDashboardPage> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0)),
               child: ListTile(
                 title: Text(
-                  products.documents[index].data['productName'],
+                  products[index].productName,
                   style: TextStyle(color: Colors.deepPurple, fontSize: 21, fontWeight: FontWeight.bold),
                 ),
                 subtitle: Text(
-                  products.documents[index].data['productColor'],
+                  products[index].productColor,
                   style: TextStyle(color: Colors.deepPurple, fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 trailing: CircleAvatar(

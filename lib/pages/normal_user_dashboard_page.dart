@@ -5,7 +5,7 @@ import 'package:firebaseauthentication/services/auth_service.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../services/auth_service.dart';
 import '../services/product_database_service.dart';
 
@@ -30,7 +30,7 @@ class NormalUserDashboardPage extends StatefulWidget {
 }
 
 class _NormalUserDashboardPageState extends State<NormalUserDashboardPage> {
-  QuerySnapshot products;
+  List<Product> products;
   ProductDatabaseService productService;
 
   @override
@@ -84,11 +84,11 @@ class _NormalUserDashboardPageState extends State<NormalUserDashboardPage> {
   }
 
   // ignore: missing_return
-  Widget createListViewOfProducts(QuerySnapshot products) {
+  Widget createListViewOfProducts(List<Product> products) {
     if (products != null) {
       return ListView.builder(
         shrinkWrap: true,
-        itemCount: products.documents.length,
+        itemCount: products.length,
         padding: EdgeInsets.symmetric(horizontal: 20),
         itemBuilder: (BuildContext context, int index) {
           return Card(
@@ -96,11 +96,11 @@ class _NormalUserDashboardPageState extends State<NormalUserDashboardPage> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0)),
             child: ListTile(
               title: Text(
-                products.documents[index].data['productName'],
+                products[index].productName,
                 style: TextStyle(color: Colors.deepPurple, fontSize: 21, fontWeight: FontWeight.bold),
               ),
               subtitle: Text(
-                products.documents[index].data['productColor'],
+                products[index].productColor,
                 style: TextStyle(color: Colors.deepPurple, fontSize: 18, fontWeight: FontWeight.bold),
               ),
               trailing: CircleAvatar(
