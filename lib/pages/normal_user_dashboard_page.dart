@@ -5,7 +5,7 @@ import 'package:firebaseauthentication/services/auth_service.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/auth_service.dart';
 import '../services/product_database_service.dart';
 
@@ -30,7 +30,7 @@ class NormalUserDashboardPage extends StatefulWidget {
 }
 
 class _NormalUserDashboardPageState extends State<NormalUserDashboardPage> {
-  List<Product> products;
+  Stream<QuerySnapshot> products;
   ProductDatabaseService productService;
 
   @override
@@ -84,35 +84,40 @@ class _NormalUserDashboardPageState extends State<NormalUserDashboardPage> {
   }
 
   // ignore: missing_return
-  Widget createListViewOfProducts(List<Product> products) {
-    if (products != null) {
-      return ListView.builder(
-        shrinkWrap: true,
-        itemCount: products.length,
-        padding: EdgeInsets.symmetric(horizontal: 20),
-        itemBuilder: (BuildContext context, int index) {
-          return Card(
-            elevation: 5,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0)),
-            child: ListTile(
-              title: Text(
-                products[index].productName,
-                style: TextStyle(color: Colors.deepPurple, fontSize: 21, fontWeight: FontWeight.bold),
-              ),
-              subtitle: Text(
-                products[index].productColor,
-                style: TextStyle(color: Colors.deepPurple, fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              trailing: CircleAvatar(
-                child: Image.asset('assets/login.png', height: 75, width: 75, fit: BoxFit.cover),
-              ),
-            ),
+  Widget createListViewOfProducts(Stream<QuerySnapshot> products) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: products,
+      builder: (BuildContext context, AsyncSnapshot<QuerySnapshot> snapshot) {
+        if (snapshot.hasData) {
+          return ListView.builder(
+            shrinkWrap: true,
+            itemCount: snapshot.data.documents.length,
+            padding: EdgeInsets.symmetric(horizontal: 20),
+            itemBuilder: (BuildContext context, int index) {
+              return Card(
+                elevation: 5,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0)),
+                child: ListTile(
+                  title: Text(
+                    snapshot.data.documents[index].data['productName'],
+                    style: TextStyle(color: Colors.deepPurple, fontSize: 21, fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Text(
+                    snapshot.data.documents[index].data['productColor'],
+                    style: TextStyle(color: Colors.deepPurple, fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  trailing: CircleAvatar(
+                    child: Image.asset('assets/login.png', height: 75, width: 75, fit: BoxFit.cover),
+                  ),
+                ),
+              );
+            },
           );
-        },
-      );
-    } else {
-      return Center(child: CircularProgressIndicator());
-    }
+        } else {
+          return Center(child: CircularProgressIndicator());
+        }
+      },
+    );
   }
 
   // ignore: missing_return

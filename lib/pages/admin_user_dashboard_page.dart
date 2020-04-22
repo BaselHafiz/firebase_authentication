@@ -1,5 +1,7 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:data_connection_checker/data_connection_checker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebaseauthentication/pages/login_options_page.dart';
 import 'package:firebaseauthentication/services/auth_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -22,7 +24,7 @@ class AdminUserDashboardPage extends StatefulWidget {
 }
 
 class _AdminUserDashboardPageState extends State<AdminUserDashboardPage> {
-  List<Product> products;
+  Stream<QuerySnapshot> products;
   ProductDatabaseService productService;
 
   @override
@@ -82,136 +84,142 @@ class _AdminUserDashboardPageState extends State<AdminUserDashboardPage> {
   }
 
   // ignore: missing_return
-  Widget createListViewOfProducts(List<Product> products, ProductDatabaseService productService, BuildContext context) {
-    if (products != null) {
-      return ListView.builder(
-        shrinkWrap: true,
-        itemCount: products.length,
-        padding: EdgeInsets.symmetric(horizontal: 20),
-        itemBuilder: (BuildContext context, int index) {
-          return Dismissible(
-            key: UniqueKey(),
-            secondaryBackground: Container(
-              color: Theme.of(context).errorColor,
-              child: Icon(Icons.update, color: Colors.white, size: 40),
-              alignment: Alignment.centerRight,
-              padding: EdgeInsets.only(right: 20),
-              margin: EdgeInsets.symmetric(horizontal: 15, vertical: 4),
-            ),
-            background: Container(
-              color: Theme.of(context).errorColor,
-              child: Icon(Icons.delete, color: Colors.white, size: 40),
-              alignment: Alignment.centerLeft,
-              padding: EdgeInsets.only(right: 20),
-              margin: EdgeInsets.symmetric(horizontal: 15, vertical: 4),
-            ),
-            onDismissed: (DismissDirection direction) async {
-              if (direction == DismissDirection.endToStart) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) => AddAndUpdateProductPage(
-                            operationMode: OperationMode.update,
-                            selectedProduct: products[index],
-                          )),
-                );
-              }
-              if (direction == DismissDirection.startToEnd) {
-                if (await productService.deleteProductVer1(products[index].productId, context)) {
-                  if (products.contains(products[index])) {
-                    setState(() {
-                      products.remove(products[index]);
-                    });
+  Widget createListViewOfProducts(
+      Stream<QuerySnapshot> products, ProductDatabaseService productService, BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: products,
+      builder: (BuildContext context, AsyncSnapshot<QuerySnapshot> snapshot) {
+        if (snapshot.hasData) {
+          return ListView.builder(
+            shrinkWrap: true,
+            itemCount: snapshot.data.documents.length,
+            padding: EdgeInsets.symmetric(horizontal: 20),
+            itemBuilder: (BuildContext context, int index) {
+              return Dismissible(
+                key: UniqueKey(),
+                secondaryBackground: Container(
+                  color: Theme.of(context).errorColor,
+                  child: Icon(Icons.update, color: Colors.white, size: 40),
+                  alignment: Alignment.centerRight,
+                  padding: EdgeInsets.only(right: 20),
+                  margin: EdgeInsets.symmetric(horizontal: 15, vertical: 4),
+                ),
+                background: Container(
+                  color: Theme.of(context).errorColor,
+                  child: Icon(Icons.delete, color: Colors.white, size: 40),
+                  alignment: Alignment.centerLeft,
+                  padding: EdgeInsets.only(right: 20),
+                  margin: EdgeInsets.symmetric(horizontal: 15, vertical: 4),
+                ),
+                onDismissed: (DismissDirection direction) async {
+                  if (direction == DismissDirection.endToStart) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => AddAndUpdateProductPage(
+                                operationMode: OperationMode.update,
+                                selectedDocument: snapshot.data.documents[index],
+                              )),
+                    );
+                  }
+                  if (direction == DismissDirection.startToEnd) {
+                    if (await productService.deleteProductVer2(snapshot.data.documents[index], context)) {
+                      /*if (snapshot.data.documents.contains(snapshot.data.documents[index])) {
+                        setState(() {
+                          snapshot.data.documents.removeAt(index);
+                        });
+                      }*/
+
+                      Scaffold.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Item is removed', style: TextStyle(fontSize: 16, color: Colors.amber)),
+                          duration: Duration(seconds: 3),
+                        ),
+                      );
+                    }
+                  }
+                },
+                // ignore: missing_return
+                confirmDismiss: (DismissDirection direction) {
+                  if (direction == DismissDirection.startToEnd) {
+                    return showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        elevation: 5,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0)),
+                        title: Text('Are you sure?'),
+                        content: Text('Do you want to remove this item?',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+                        actions: <Widget>[
+                          FlatButton(
+                            child: Text('No', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            onPressed: () {
+                              Navigator.of(context).pop(false);
+                            },
+                          ),
+                          FlatButton(
+                            child: Text('Yes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            onPressed: () {
+                              Navigator.of(context).pop(true);
+                            },
+                          ),
+                        ],
+                      ),
+                    );
                   }
 
-                  Scaffold.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Item is removed', style: TextStyle(fontSize: 16, color: Colors.amber)),
-                      duration: Duration(seconds: 3),
+                  if (direction == DismissDirection.endToStart) {
+                    return showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        elevation: 5,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0)),
+                        title: Text('Are you sure?'),
+                        content: Text('Do you want to update this item?',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+                        actions: <Widget>[
+                          FlatButton(
+                            child: Text('No', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            onPressed: () {
+                              Navigator.of(context).pop(false);
+                            },
+                          ),
+                          FlatButton(
+                            child: Text('Yes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            onPressed: () {
+                              Navigator.of(context).pop(true);
+                            },
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                },
+                child: Card(
+                  elevation: 5,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0)),
+                  child: ListTile(
+                    title: Text(
+                      snapshot.data.documents[index].data['productName'],
+                      style: TextStyle(color: Colors.deepPurple, fontSize: 21, fontWeight: FontWeight.bold),
                     ),
-                  );
-                }
-              }
-            },
-            // ignore: missing_return
-            confirmDismiss: (DismissDirection direction) {
-              if (direction == DismissDirection.startToEnd) {
-                return showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    elevation: 5,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0)),
-                    title: Text('Are you sure?'),
-                    content: Text('Do you want to remove this item?',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
-                    actions: <Widget>[
-                      FlatButton(
-                        child: Text('No', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        onPressed: () {
-                          Navigator.of(context).pop(false);
-                        },
-                      ),
-                      FlatButton(
-                        child: Text('Yes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        onPressed: () {
-                          Navigator.of(context).pop(true);
-                        },
-                      ),
-                    ],
+                    subtitle: Text(
+                      snapshot.data.documents[index].data['productColor'],
+                      style: TextStyle(color: Colors.deepPurple, fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    trailing: CircleAvatar(
+                      child: Image.asset('assets/login.png', height: 75, width: 75, fit: BoxFit.cover),
+                    ),
                   ),
-                );
-              }
-
-              if (direction == DismissDirection.endToStart) {
-                return showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    elevation: 5,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0)),
-                    title: Text('Are you sure?'),
-                    content: Text('Do you want to update this item?',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
-                    actions: <Widget>[
-                      FlatButton(
-                        child: Text('No', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        onPressed: () {
-                          Navigator.of(context).pop(false);
-                        },
-                      ),
-                      FlatButton(
-                        child: Text('Yes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        onPressed: () {
-                          Navigator.of(context).pop(true);
-                        },
-                      ),
-                    ],
-                  ),
-                );
-              }
+                ),
+              );
             },
-            child: Card(
-              elevation: 5,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0)),
-              child: ListTile(
-                title: Text(
-                  products[index].productName,
-                  style: TextStyle(color: Colors.deepPurple, fontSize: 21, fontWeight: FontWeight.bold),
-                ),
-                subtitle: Text(
-                  products[index].productColor,
-                  style: TextStyle(color: Colors.deepPurple, fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                trailing: CircleAvatar(
-                  child: Image.asset('assets/login.png', height: 75, width: 75, fit: BoxFit.cover),
-                ),
-              ),
-            ),
           );
-        },
-      );
-    } else {
-      return Center(child: CircularProgressIndicator());
-    }
+        } else {
+          return Center(child: CircularProgressIndicator());
+        }
+      },
+    );
   }
 
   Future<void> getProducts(ProductDatabaseService productService, BuildContext context) async {
@@ -267,6 +275,7 @@ class MainDrawer extends StatelessWidget {
                 if (await authService.signOut(context)) {
                   Navigator.pop(context);
                   Navigator.pop(context);
+                  Navigator.pushReplacementNamed(context, LoginOptionsPage.routeName);
                 }
               } else {
                 authService.notifyUser('No Internet connection.', context);

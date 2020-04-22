@@ -13,16 +13,11 @@ class ProductDatabaseService with ChangeNotifier {
   bool isLoading = false;
   List<Product> products = [];
 
-  Future<bool> addProduct(Product newProduct, BuildContext context) async {
+  Future<bool> addProduct(Map<String, dynamic> productData, BuildContext context) async {
     try {
       isLoading = true;
       notifyListeners();
-      await Firestore.instance.collection('products').add({
-        'productId': newProduct.productId,
-        'productName': newProduct.productName,
-        'productColor': newProduct.productColor,
-      });
-
+      await Firestore.instance.collection('products').add(productData);
       isLoading = false;
       notifyListeners();
       return true;
@@ -35,22 +30,11 @@ class ProductDatabaseService with ChangeNotifier {
   }
 
   // ignore: missing_return
-  Future<List<Product>> retrieveProducts(BuildContext context) async {
-    List<Product> retrievedProducts = [];
-    Product newProduct;
-
+  Future<Stream<QuerySnapshot>> retrieveProducts(BuildContext context) async {
     try {
-      QuerySnapshot snapshots = await Firestore.instance.collection('products').getDocuments();
-      if (snapshots.documents.isNotEmpty) {
-        snapshots.documents.forEach((DocumentSnapshot document) {
-          newProduct = Product(
-            productId: document.data['productId'],
-            productName: document.data['productName'],
-            productColor: document.data['productColor'],
-          );
-          retrievedProducts.add(newProduct);
-        });
-        return retrievedProducts;
+      Stream<QuerySnapshot> snapshots = Firestore.instance.collection('products').snapshots();
+      if (!await snapshots.isEmpty) {
+        return snapshots;
       }
     } catch (error) {
       notifyUser(error.message.toString(), context);
@@ -101,8 +85,7 @@ class ProductDatabaseService with ChangeNotifier {
     try {
       isLoading = true;
       notifyListeners();
-      // todo
-
+      await Firestore.instance.collection('products').document(selectedDocument.documentID).updateData(newData);
       isLoading = false;
       notifyListeners();
       return true;
@@ -116,8 +99,7 @@ class ProductDatabaseService with ChangeNotifier {
 
   Future<bool> deleteProductVer2(DocumentSnapshot selectedDocument, BuildContext context) async {
     try {
-      // todo
-
+      await Firestore.instance.collection('products').document(selectedDocument.documentID).delete();
       return true;
     } catch (error) {
       notifyUser(error.message.toString(), context);
